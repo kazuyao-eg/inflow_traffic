@@ -4,7 +4,7 @@ import streamlit as st
 import altair as alt
 
 st.set_page_config(
-    page_title="流入顧客セグメント分析",
+    page_title="属性別流入ダッシュボード",
     layout="wide"
 )
 
@@ -201,6 +201,10 @@ def monthly_composition_for_members(df: pd.DataFrame, group_col: str) -> pd.Data
 def main():
     st.title("属性別流入ダッシュボード")
 
+    st.markdown(
+        "月別の推移・属性別の構成・チャネル別・CEFR別の流入数、入会率を把握するためのダッシュボードです。"
+    )
+
     # データ読み込み
     try:
         df_raw = load_data("fc_info.csv")
@@ -250,11 +254,11 @@ def main():
         st.markdown("---")
         st.subheader("属性構成（参考）")
 
-        col_a, col_b, col_c = st.columns(3)
+        # 性別構成：表 + 円グラフ
+        st.caption("性別構成")
+        col_t1, col_p1 = st.columns(2)
 
-        # 性別構成：件数(比率)
-        with col_a:
-            st.caption("性別構成")
+        with col_t1:
             gender_dist = (
                 df_filtered["性別"]
                 .value_counts(dropna=False)
@@ -263,34 +267,78 @@ def main():
             gender_dist.columns = ["性別", "件数"]
             total = gender_dist["件数"].sum()
             if total > 0:
+                gender_dist["比率"] = gender_dist["件数"] / total
                 gender_dist["件数(比率)"] = gender_dist["件数"].astype(int).astype(str) + "(" + (
-                    (gender_dist["件数"] / total * 100).round(0).astype(int).astype(str) + "%)"
+                    (gender_dist["比率"] * 100).round(0).astype(int).astype(str) + "%)"
                 )
             else:
+                gender_dist["比率"] = 0.0
                 gender_dist["件数(比率)"] = "0(0%)"
             st.dataframe(gender_dist[["性別", "件数(比率)"]])
 
-        # 在住国構成：件数(比率)
-        with col_b:
-            st.caption("在住国構成")
-            country_dist = (
-                df_filtered["在住国"]
+        with col_p1:
+            if total > 0:
+                pie_gender = (
+                    alt.Chart(gender_dist)
+                    .mark_arc()
+                    .encode(
+                        theta=alt.Theta("件数:Q", title="件数"),
+                        color=alt.Color("性別:N", title="性別"),
+                        tooltip=[
+                            alt.Tooltip("性別:N", title="性別"),
+                            alt.Tooltip("件数:Q", title="件数", format=",d"),
+                            alt.Tooltip("比率:Q", title="比率", format=".1%"),
+                        ],
+                    )
+                    .properties(width=260, height=260)
+                )
+                st.altair_chart(pie_gender, use_container_width=True)
+
+        # 年代構成：表 + 円グラフ
+        st.caption("年代構成")
+        col_t2, col_p2 = st.columns(2)
+
+        with col_t2:
+            age_dist = (
+                df_filtered["年代"]
                 .value_counts(dropna=False)
                 .reset_index()
             )
-            country_dist.columns = ["在住国", "件数"]
-            total_c = country_dist["件数"].sum()
-            if total_c > 0:
-                country_dist["件数(比率)"] = country_dist["件数"].astype(int).astype(str) + "(" + (
-                    (country_dist["件数"] / total_c * 100).round(0).astype(int).astype(str) + "%)"
+            age_dist.columns = ["年代", "件数"]
+            total_age = age_dist["件数"].sum()
+            if total_age > 0:
+                age_dist["比率"] = age_dist["件数"] / total_age
+                age_dist["件数(比率)"] = age_dist["件数"].astype(int).astype(str) + "(" + (
+                    (age_dist["比率"] * 100).round(0).astype(int).astype(str) + "%)"
                 )
             else:
-                country_dist["件数(比率)"] = "0(0%)"
-            st.dataframe(country_dist[["在住国", "件数(比率)"]])
+                age_dist["比率"] = 0.0
+                age_dist["件数(比率)"] = "0(0%)"
+            st.dataframe(age_dist[["年代", "件数(比率)"]])
 
-        # CEFR構成：件数(比率)
-        with col_c:
-            st.caption("CEFR構成")
+        with col_p2:
+            if total_age > 0:
+                pie_age = (
+                    alt.Chart(age_dist)
+                    .mark_arc()
+                    .encode(
+                        theta=alt.Theta("件数:Q", title="件数"),
+                        color=alt.Color("年代:N", title="年代"),
+                        tooltip=[
+                            alt.Tooltip("年代:N", title="年代"),
+                            alt.Tooltip("件数:Q", title="件数", format=",d"),
+                            alt.Tooltip("比率:Q", title="比率", format=".1%"),
+                        ],
+                    )
+                    .properties(width=260, height=260)
+                )
+                st.altair_chart(pie_age, use_container_width=True)
+
+        # CEFR構成：表 + 円グラフ
+        st.caption("CEFR構成")
+        col_t3, col_p3 = st.columns(2)
+
+        with col_t3:
             cefr_dist = (
                 df_filtered["CEFR"]
                 .value_counts(dropna=False)
@@ -299,16 +347,77 @@ def main():
             cefr_dist.columns = ["CEFR", "件数"]
             total_cefr = cefr_dist["件数"].sum()
             if total_cefr > 0:
+                cefr_dist["比率"] = cefr_dist["件数"] / total_cefr
                 cefr_dist["件数(比率)"] = cefr_dist["件数"].astype(int).astype(str) + "(" + (
-                    (cefr_dist["件数"] / total_cefr * 100).round(0).astype(int).astype(str) + "%)"
+                    (cefr_dist["比率"] * 100).round(0).astype(int).astype(str) + "%)"
                 )
             else:
+                cefr_dist["比率"] = 0.0
                 cefr_dist["件数(比率)"] = "0(0%)"
             st.dataframe(cefr_dist[["CEFR", "件数(比率)"]])
+
+        with col_p3:
+            if total_cefr > 0:
+                pie_cefr = (
+                    alt.Chart(cefr_dist)
+                    .mark_arc()
+                    .encode(
+                        theta=alt.Theta("件数:Q", title="件数"),
+                        color=alt.Color("CEFR:N", title="CEFR"),
+                        tooltip=[
+                            alt.Tooltip("CEFR:N", title="CEFR"),
+                            alt.Tooltip("件数:Q", title="件数", format=",d"),
+                            alt.Tooltip("比率:Q", title="比率", format=".1%"),
+                        ],
+                    )
+                    .properties(width=260, height=260)
+                )
+                st.altair_chart(pie_cefr, use_container_width=True)
+
+        # 在住国構成：表 + 円グラフ
+        st.caption("在住国構成")
+        col_t4, col_p4 = st.columns(2)
+
+        with col_t4:
+            country_dist = (
+                df_filtered["在住国"]
+                .value_counts(dropna=False)
+                .reset_index()
+            )
+            country_dist.columns = ["在住国", "件数"]
+            total_c = country_dist["件数"].sum()
+            if total_c > 0:
+                country_dist["比率"] = country_dist["件数"] / total_c
+                country_dist["件数(比率)"] = country_dist["件数"].astype(int).astype(str) + "(" + (
+                    (country_dist["比率"] * 100).round(0).astype(int).astype(str) + "%)"
+                )
+            else:
+                country_dist["比率"] = 0.0
+                country_dist["件数(比率)"] = "0(0%)"
+            st.dataframe(country_dist[["在住国", "件数(比率)"]])
+
+        with col_p4:
+            if total_c > 0:
+                pie_country = (
+                    alt.Chart(country_dist)
+                    .mark_arc()
+                    .encode(
+                        theta=alt.Theta("件数:Q", title="件数"),
+                        color=alt.Color("在住国:N", title="在住国"),
+                        tooltip=[
+                            alt.Tooltip("在住国:N", title="在住国"),
+                            alt.Tooltip("件数:Q", title="件数", format=",d"),
+                            alt.Tooltip("比率:Q", title="比率", format=".1%"),
+                        ],
+                    )
+                    .properties(width=260, height=260)
+                )
+                st.altair_chart(pie_country, use_container_width=True)
 
         st.markdown("---")
         st.subheader("属性クロス集計（件数）")
 
+        # 配置順を指定どおりに変更
         st.caption("性別 × 年代（件数）")
         ct_gender_age = pd.crosstab(df_filtered["性別"], df_filtered["年代"]).fillna(0).astype(int)
         st.dataframe(ct_gender_age)
@@ -317,9 +426,21 @@ def main():
         ct_gender_cefr = pd.crosstab(df_filtered["性別"], df_filtered["CEFR"]).fillna(0).astype(int)
         st.dataframe(ct_gender_cefr)
 
+        st.caption("性別 × 在住国（件数）")
+        ct_gender_country = pd.crosstab(df_filtered["性別"], df_filtered["在住国"]).fillna(0).astype(int)
+        st.dataframe(ct_gender_country)
+
         st.caption("年代 × CEFR（件数）")
         ct_age_cefr = pd.crosstab(df_filtered["年代"], df_filtered["CEFR"]).fillna(0).astype(int)
         st.dataframe(ct_age_cefr)
+
+        st.caption("年代 × 在住国（件数）")
+        ct_age_country = pd.crosstab(df_filtered["年代"], df_filtered["在住国"]).fillna(0).astype(int)
+        st.dataframe(ct_age_country)
+
+        st.caption("在住国 × CEFR（件数）")
+        ct_country_cefr = pd.crosstab(df_filtered["在住国"], df_filtered["CEFR"]).fillna(0).astype(int)
+        st.dataframe(ct_country_cefr)
 
     # ===== 流入像（属性・チャネル）タブ =====
     with tab_segment:
@@ -327,7 +448,7 @@ def main():
 
         channel_col = filters["channel_axis"]
 
-        # チャネル別サマリー（テーブル表示） ← 先に表
+        # チャネル別サマリー（テーブル表示）
         channel_summary = aggregate_channel_summary(df_filtered, channel_col)
         st.dataframe(channel_summary.sort_values("FC件数", ascending=False), use_container_width=True)
 
