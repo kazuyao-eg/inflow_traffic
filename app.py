@@ -254,7 +254,7 @@ def main():
         st.markdown("---")
         st.subheader("属性構成（参考）")
 
-        # 性別構成：表 + 円グラフ
+        # ---- 性別構成：表 + 円グラフ ----
         st.caption("性別構成")
         col_t1, col_p1 = st.columns(2)
 
@@ -274,16 +274,26 @@ def main():
             else:
                 gender_dist["比率"] = 0.0
                 gender_dist["件数(比率)"] = "0(0%)"
-            st.dataframe(gender_dist[["性別", "件数(比率)"]])
+            # 合計行を追加
+            total_row = pd.DataFrame(
+                [["合計", total, 1.0 if total > 0 else 0.0, f"{int(total)}(100%)" if total > 0 else "0(0%)"]],
+                columns=["性別", "件数", "比率", "件数(比率)"]
+            )
+            gender_table = pd.concat([gender_dist, total_row], ignore_index=True)
+            st.dataframe(gender_table[["性別", "件数(比率)"]])
 
         with col_p1:
             if total > 0:
                 pie_gender = (
-                    alt.Chart(gender_dist)
+                    alt.Chart(gender_dist)  # 合計行は含めない
                     .mark_arc()
                     .encode(
                         theta=alt.Theta("件数:Q", title="件数"),
-                        color=alt.Color("性別:N", title="性別"),
+                        color=alt.Color(
+                            "性別:N",
+                            title="性別",
+                            scale=alt.Scale(scheme="blues")
+                        ),
                         tooltip=[
                             alt.Tooltip("性別:N", title="性別"),
                             alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -294,7 +304,7 @@ def main():
                 )
                 st.altair_chart(pie_gender, use_container_width=True)
 
-        # 年代構成：表 + 円グラフ
+        # ---- 年代構成：表 + 円グラフ ----
         st.caption("年代構成")
         col_t2, col_p2 = st.columns(2)
 
@@ -314,7 +324,12 @@ def main():
             else:
                 age_dist["比率"] = 0.0
                 age_dist["件数(比率)"] = "0(0%)"
-            st.dataframe(age_dist[["年代", "件数(比率)"]])
+            total_row_age = pd.DataFrame(
+                [["合計", total_age, 1.0 if total_age > 0 else 0.0, f"{int(total_age)}(100%)" if total_age > 0 else "0(0%)"]],
+                columns=["年代", "件数", "比率", "件数(比率)"]
+            )
+            age_table = pd.concat([age_dist, total_row_age], ignore_index=True)
+            st.dataframe(age_table[["年代", "件数(比率)"]])
 
         with col_p2:
             if total_age > 0:
@@ -323,7 +338,11 @@ def main():
                     .mark_arc()
                     .encode(
                         theta=alt.Theta("件数:Q", title="件数"),
-                        color=alt.Color("年代:N", title="年代"),
+                        color=alt.Color(
+                            "年代:N",
+                            title="年代",
+                            scale=alt.Scale(scheme="blues")
+                        ),
                         tooltip=[
                             alt.Tooltip("年代:N", title="年代"),
                             alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -334,7 +353,7 @@ def main():
                 )
                 st.altair_chart(pie_age, use_container_width=True)
 
-        # CEFR構成：表 + 円グラフ
+        # ---- CEFR構成：表 + 円グラフ ----
         st.caption("CEFR構成")
         col_t3, col_p3 = st.columns(2)
 
@@ -354,7 +373,12 @@ def main():
             else:
                 cefr_dist["比率"] = 0.0
                 cefr_dist["件数(比率)"] = "0(0%)"
-            st.dataframe(cefr_dist[["CEFR", "件数(比率)"]])
+            total_row_cefr = pd.DataFrame(
+                [["合計", total_cefr, 1.0 if total_cefr > 0 else 0.0, f"{int(total_cefr)}(100%)" if total_cefr > 0 else "0(0%)"]],
+                columns=["CEFR", "件数", "比率", "件数(比率)"]
+            )
+            cefr_table = pd.concat([cefr_dist, total_row_cefr], ignore_index=True)
+            st.dataframe(cefr_table[["CEFR", "件数(比率)"]])
 
         with col_p3:
             if total_cefr > 0:
@@ -363,7 +387,11 @@ def main():
                     .mark_arc()
                     .encode(
                         theta=alt.Theta("件数:Q", title="件数"),
-                        color=alt.Color("CEFR:N", title="CEFR"),
+                        color=alt.Color(
+                            "CEFR:N",
+                            title="CEFR",
+                            scale=alt.Scale(scheme="blues")
+                        ),
                         tooltip=[
                             alt.Tooltip("CEFR:N", title="CEFR"),
                             alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -374,7 +402,7 @@ def main():
                 )
                 st.altair_chart(pie_cefr, use_container_width=True)
 
-        # 在住国構成：表 + 円グラフ
+        # ---- 在住国構成：表 + 円グラフ ----
         st.caption("在住国構成")
         col_t4, col_p4 = st.columns(2)
 
@@ -394,7 +422,12 @@ def main():
             else:
                 country_dist["比率"] = 0.0
                 country_dist["件数(比率)"] = "0(0%)"
-            st.dataframe(country_dist[["在住国", "件数(比率)"]])
+            total_row_country = pd.DataFrame(
+                [["合計", total_c, 1.0 if total_c > 0 else 0.0, f"{int(total_c)}(100%)" if total_c > 0 else "0(0%)"]],
+                columns=["在住国", "件数", "比率", "件数(比率)"]
+            )
+            country_table = pd.concat([country_dist, total_row_country], ignore_index=True)
+            st.dataframe(country_table[["在住国", "件数(比率)"]])
 
         with col_p4:
             if total_c > 0:
@@ -403,7 +436,11 @@ def main():
                     .mark_arc()
                     .encode(
                         theta=alt.Theta("件数:Q", title="件数"),
-                        color=alt.Color("在住国:N", title="在住国"),
+                        color=alt.Color(
+                            "在住国:N",
+                            title="在住国",
+                            scale=alt.Scale(scheme="blues")
+                        ),
                         tooltip=[
                             alt.Tooltip("在住国:N", title="在住国"),
                             alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -417,29 +454,48 @@ def main():
         st.markdown("---")
         st.subheader("属性クロス集計（件数）")
 
-        # 配置順を指定どおりに変更
+        # すべて margins=True で行・列合計を追加
+
         st.caption("性別 × 年代（件数）")
-        ct_gender_age = pd.crosstab(df_filtered["性別"], df_filtered["年代"]).fillna(0).astype(int)
+        ct_gender_age = pd.crosstab(
+            df_filtered["性別"], df_filtered["年代"],
+            margins=True, margins_name="合計"
+        ).fillna(0).astype(int)
         st.dataframe(ct_gender_age)
 
         st.caption("性別 × CEFR（件数）")
-        ct_gender_cefr = pd.crosstab(df_filtered["性別"], df_filtered["CEFR"]).fillna(0).astype(int)
+        ct_gender_cefr = pd.crosstab(
+            df_filtered["性別"], df_filtered["CEFR"],
+            margins=True, margins_name="合計"
+        ).fillna(0).astype(int)
         st.dataframe(ct_gender_cefr)
 
         st.caption("性別 × 在住国（件数）")
-        ct_gender_country = pd.crosstab(df_filtered["性別"], df_filtered["在住国"]).fillna(0).astype(int)
+        ct_gender_country = pd.crosstab(
+            df_filtered["性別"], df_filtered["在住国"],
+            margins=True, margins_name="合計"
+        ).fillna(0).astype(int)
         st.dataframe(ct_gender_country)
 
         st.caption("年代 × CEFR（件数）")
-        ct_age_cefr = pd.crosstab(df_filtered["年代"], df_filtered["CEFR"]).fillna(0).astype(int)
+        ct_age_cefr = pd.crosstab(
+            df_filtered["年代"], df_filtered["CEFR"],
+            margins=True, margins_name="合計"
+        ).fillna(0).astype(int)
         st.dataframe(ct_age_cefr)
 
         st.caption("年代 × 在住国（件数）")
-        ct_age_country = pd.crosstab(df_filtered["年代"], df_filtered["在住国"]).fillna(0).astype(int)
+        ct_age_country = pd.crosstab(
+            df_filtered["年代"], df_filtered["在住国"],
+            margins=True, margins_name="合計"
+        ).fillna(0).astype(int)
         st.dataframe(ct_age_country)
 
         st.caption("在住国 × CEFR（件数）")
-        ct_country_cefr = pd.crosstab(df_filtered["在住国"], df_filtered["CEFR"]).fillna(0).astype(int)
+        ct_country_cefr = pd.crosstab(
+            df_filtered["在住国"], df_filtered["CEFR"],
+            margins=True, margins_name="合計"
+        ).fillna(0).astype(int)
         st.dataframe(ct_country_cefr)
 
     # ===== 流入像（属性・チャネル）タブ =====
