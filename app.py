@@ -169,7 +169,7 @@ def time_composition(
         df2 = df.copy()
 
     if df2.empty:
-        return pd.DataFrame(columns=[time_col, group_col, "件数", "比率"])
+        return pd.DataFrame(columns=[time_col, group_col, "件数", "比率", "市場寄与度"])
 
     base = (
         df2.groupby([time_col, group_col])
@@ -183,6 +183,32 @@ def time_composition(
     )
     merged = base.merge(total, on=time_col, how="left")
     merged["比率"] = np.where(merged["合計"] > 0, merged["件数"] / merged["合計"], np.nan)
+
+    # 市場寄与度の計算（セグメントの増減 / 全体の増減）
+    merged = merged.sort_values([time_col, group_col]).copy()
+
+    # 全体増減
+    total_series = merged.groupby(time_col)["件数"].sum().sort_index()
+    total_delta = total_series.diff()
+    merged = merged.merge(
+        total_delta.rename("全体増減"),
+        on=time_col,
+        how="left"
+    )
+
+    # セグメント増減
+    merged["増減"] = (
+        merged.sort_values([group_col, time_col])
+        .groupby(group_col)["件数"]
+        .diff()
+    )
+
+    merged["市場寄与度"] = np.where(
+        (merged["全体増減"] != 0) & merged["全体増減"].notna(),
+        merged["増減"] / merged["全体増減"],
+        np.nan
+    )
+
     return merged
 
 
@@ -383,7 +409,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str) -> None:
 
 def main():
     st.title("属性別流入ダッシュボード")
-    st.markdown("左のフィルター、各タブの「表示形式の切り替え」スイッチでフィルターをかけることが可能です。")
+    st.markdown("月別の推移・属性別の構成・チャネル別・CEFR別の流入数、入会率を把握するためのダッシュボードです。")
 
     try:
         df_raw = load_data("fc_info.csv")
@@ -439,7 +465,7 @@ def main():
 
         display_mode_attr = st.radio(
             "表示形式の切り替え③（指標）",
-            options=["絶対数（件数）", "割合（構成比）"],
+            options=["絶対数（件数）", "割合（構成比）", "市場寄与度"],
             horizontal=True
         )
 
@@ -459,9 +485,18 @@ def main():
                 st.info("表示できるデータがありません。")
                 return
 
-            y_field = "件数" if display_mode_attr == "絶対数（件数）" else "比率"
-            y_title = "件数" if display_mode_attr == "絶対数（件数）" else "構成比"
-            axis_format = ",.0f" if display_mode_attr == "絶対数（件数）" else ".2%"
+            if display_mode_attr == "絶対数（件数）":
+                y_field = "件数"
+                y_title = "件数"
+                axis_format = ",.0f"
+            elif display_mode_attr == "割合（構成比）":
+                y_field = "比率"
+                y_title = "構成比"
+                axis_format = ".2%"
+            else:  # 市場寄与度
+                y_field = "市場寄与度"
+                y_title = "市場寄与度"
+                axis_format = ".2%"
 
             chart = (
                 alt.Chart(comp)
@@ -483,6 +518,7 @@ def main():
                         alt.Tooltip(f"{group_col}:N", title=group_col),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
                         alt.Tooltip("比率:Q", title="構成比", format=".2%"),
+                        alt.Tooltip("市場寄与度:Q", title="市場寄与度", format=".2%"),
                     ],
                 )
                 .properties(height=260)
