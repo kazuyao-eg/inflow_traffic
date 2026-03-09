@@ -16,6 +16,7 @@ def load_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     df["FC実施年月日"] = pd.to_datetime(df["FC実施年月日"], errors="coerce")
     df["年月"] = df["FC実施年月日"].dt.to_period("M").astype(str)
+    df["月"] = df["FC実施年月日"].dt.strftime("%m")
 
     df["入会フラグ"] = np.where(df["ステータス"] == "入会", 1, 0)
     df["入会ステータス"] = np.where(df["入会フラグ"] == 1, "入会", "非入会")
@@ -156,6 +157,35 @@ def monthly_composition_for_members(df: pd.DataFrame, group_col: str) -> pd.Data
     return merged
 
 
+def time_composition(
+    df: pd.DataFrame,
+    time_col: str,
+    group_col: str,
+    member_base: bool
+) -> pd.DataFrame:
+    if member_base:
+        df2 = df[df["入会フラグ"] == 1].copy()
+    else:
+        df2 = df.copy()
+
+    if df2.empty:
+        return pd.DataFrame(columns=[time_col, group_col, "件数", "比率"])
+
+    base = (
+        df2.groupby([time_col, group_col])
+        .size()
+        .reset_index(name="件数")
+    )
+    total = (
+        df2.groupby(time_col)
+        .size()
+        .reset_index(name="合計")
+    )
+    merged = base.merge(total, on=time_col, how="left")
+    merged["比率"] = np.where(merged["合計"] > 0, merged["件数"] / merged["合計"], np.nan)
+    return merged
+
+
 def format_crosstab_with_ratio(ct: pd.DataFrame) -> pd.DataFrame:
     """クロス集計表の各セルを 件数(比率%) 形式にする。margins 含む。比率の分母は全体合計。"""
     ct2 = ct.fillna(0).astype(int)
@@ -176,10 +206,9 @@ def format_crosstab_with_ratio(ct: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def make_dist(df: pd.DataFrame, col: str, label: str) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
-    """属性の分布を、円グラフ用（合計なし）と表用（合計あり）で返す。件数(比率)は小数第2位まで。"""
+def make_dist(df: pd.DataFrame, col: str, label: str):
+    """属性分布（表＋円グラフ用）"""
     s = df[col]
-
     if col == "年代":
         vc = s.value_counts(dropna=False, sort=False)
     else:
@@ -193,24 +222,14 @@ def make_dist(df: pd.DataFrame, col: str, label: str) -> Tuple[pd.DataFrame, pd.
         dist["比率"] = dist["件数"] / total
         dist["件数(比率)"] = dist.apply(lambda r: f"{int(r['件数'])}({r['比率'] * 100:.2f}%)", axis=1)
         total_row = pd.DataFrame(
-            [[
-                "合計",
-                total,
-                1.0,
-                f"{total}(100.00%)"
-            ]],
+            [["合計", total, 1.0, f"{total}(100.00%)"]],
             columns=[label, "件数", "比率", "件数(比率)"],
         )
     else:
         dist["比率"] = 0.0
         dist["件数(比率)"] = dist["件数"].apply(lambda x: f"{int(x)}(0.00%)")
         total_row = pd.DataFrame(
-            [[
-                "合計",
-                0,
-                0.0,
-                "0(0.00%)"
-            ]],
+            [["合計", 0, 0.0, "0(0.00%)"]],
             columns=[label, "件数", "比率", "件数(比率)"],
         )
 
@@ -219,8 +238,9 @@ def make_dist(df: pd.DataFrame, col: str, label: str) -> Tuple[pd.DataFrame, pd.
     return pie, table[[label, "件数(比率)"]], total
 
 
-def render_summary_tab(df: pd.DataFrame, monthly_title: str, monthly_y_title: str) -> None:
-    st.subheader(monthly_title)
+def render_summary_tab(df: pd.DataFrame, base_label: str) -> None:
+    # 月別集計
+    st.subheader(f"月別 {base_label}件数")
 
     monthly_cnt = (
         df.groupby("年月")
@@ -234,7 +254,7 @@ def render_summary_tab(df: pd.DataFrame, monthly_title: str, monthly_y_title: st
             .mark_line(point=True)
             .encode(
                 x=alt.X("年月:N", sort=sorted(monthly_cnt["年月"].unique()), title="年月"),
-                y=alt.Y("件数:Q", title=monthly_y_title),
+                y=alt.Y("件数:Q", title=f"月別 {base_label}件数"),
                 tooltip=[
                     alt.Tooltip("年月:N", title="年月"),
                     alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -382,24 +402,106 @@ def main():
         st.warning("現在のフィルタ条件ではデータがありません。条件を緩めてみてください。")
         return
 
-    tab_fc, tab_member, tab_segment, tab_cefr = st.tabs(
-        ["サマリー（FC）", "サマリー（入会）", "流入像（属性・チャネル）", "CEFR分析"]
+    tab_summary, tab_attr, tab_channel, tab_cefr = st.tabs(
+        ["サマリー", "流入像（属性）", "流入像（チャネル）", "CEFR分析"]
     )
 
-    # サマリー（FC）
-    with tab_fc:
-        render_summary_tab(df_filtered, "月別 FC件数", "月別 FC件数")
-
-    # サマリー（入会）
-    with tab_member:
-        df_member = df_filtered[df_filtered["入会フラグ"] == 1].copy()
-        if df_member.empty:
-            st.warning("現在のフィルタ条件では入会データがありません。条件を緩めてみてください。")
+    # ===== サマリー（FC / 入会 切り替え）=====
+    with tab_summary:
+        base_mode = st.radio(
+            "表示形式の切り替え（ベース）",
+            options=["FC件数ベース", "入会件数ベース"],
+            horizontal=True
+        )
+        if base_mode == "入会件数ベース":
+            df_base = df_filtered[df_filtered["入会フラグ"] == 1].copy()
+            if df_base.empty:
+                st.warning("現在のフィルタ条件では入会データがありません。条件を緩めてみてください。")
+            else:
+                render_summary_tab(df_base, "入会")
         else:
-            render_summary_tab(df_member, "月別 入会件数", "月別 入会件数")
+            render_summary_tab(df_filtered, "FC")
 
-    # 流入像（属性・チャネル）
-    with tab_segment:
+    # ===== 流入像（属性）=====
+    with tab_attr:
+        st.subheader("流入像（属性）")
+
+        base_mode_attr = st.radio(
+            "表示形式の切り替え①（ベース）",
+            options=["FC件数ベース", "入会件数ベース"],
+            horizontal=True
+        )
+        member_base_attr = base_mode_attr == "入会件数ベース"
+
+        time_mode = st.radio(
+            "表示形式の切り替え②（時間軸）",
+            options=["年月", "月別"],
+            horizontal=True
+        )
+        time_col = "年月" if time_mode == "年月" else "月"
+
+        def plot_attr_ts(title: str, cols, label_col_name: str):
+            st.caption(title)
+            if isinstance(cols, str):
+                group_col = cols
+                df_work = df_filtered
+            else:
+                col1, col2 = cols
+                group_col = f"{col1}×{col2}"
+                df_work = df_filtered.copy()
+                df_work[group_col] = df_work[col1].astype(str) + "×" + df_work[col2].astype(str)
+
+            comp = time_composition(df_work, time_col, group_col, member_base_attr)
+            if comp.empty:
+                st.info("表示できるデータがありません。")
+                return
+
+            display_mode = "絶対数（件数）" if label_col_name == "件数" else "割合（構成比）"
+            # 実際にはサイドの display_mode ではなく、常にスイッチ①に連動したベースのみなので、
+            # y 軸は比率/件数の両方に対応できるよう可変にする場合は別ラジオを用意する。
+
+            # ここでは「FC/入会ベース」だけ切り替え、縦軸は比率固定とせず、
+            # 簡単のため「比率」をメイン、件数はツールチップで見る形にする
+            y_field = "比率"
+            y_title = "構成比"
+
+            chart = (
+                alt.Chart(comp)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X(f"{time_col}:N", sort=sorted(comp[time_col].unique().tolist()), title=time_col),
+                    y=alt.Y(
+                        f"{y_field}:Q",
+                        title=y_title,
+                        axis=alt.Axis(format=".2%")
+                    ),
+                    color=alt.Color(f"{group_col}:N", title=group_col),
+                    tooltip=[
+                        alt.Tooltip(f"{time_col}:N", title=time_col),
+                        alt.Tooltip(f"{group_col}:N", title=group_col),
+                        alt.Tooltip("件数:Q", title="件数", format=",d"),
+                        alt.Tooltip("比率:Q", title="構成比", format=".2%"),
+                    ],
+                )
+                .properties(height=260)
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+        # 単属性
+        plot_attr_ts("性別別 推移", "性別", "比率")
+        plot_attr_ts("年代別 推移", "年代", "比率")
+        plot_attr_ts("在住国別 推移", "在住国", "比率")
+
+        # ペア属性
+        plot_attr_ts("性別 × 年代別 推移", ("性別", "年代"), "比率")
+        plot_attr_ts("性別 × CEFR 推移", ("性別", "CEFR"), "比率")
+        plot_attr_ts("性別 × 在住国 推移", ("性別", "在住国"), "比率")
+        plot_attr_ts("年代 × CEFR 推移", ("年代", "CEFR"), "比率")
+        plot_attr_ts("年代 × 在住国 推移", ("年代", "在住国"), "比率")
+        plot_attr_ts("在住国 × CEFR 推移", ("在住国", "CEFR"), "比率")
+
+    # ===== 流入像（チャネル）=====
+    with tab_channel:
         st.subheader(f"チャネル別（{filters['channel_axis']}） 入会分析")
 
         channel_col = filters["channel_axis"]
@@ -456,182 +558,7 @@ def main():
         else:
             st.info("チャネルデータが不足しています。")
 
-        st.markdown("---")
-        st.subheader("属性別 月別構成比（FC件数ベース）")
-
-        # 性別（FCベース）
-        st.caption("性別別 月別推移（FC件数ベース）")
-        gm = monthly_composition(df_filtered, "性別")
-        if not gm.empty:
-            y_field = "件数" if display_mode == "絶対数（件数）" else "比率"
-            y_title = "件数" if display_mode == "絶対数（件数）" else "構成比"
-            chart_gender = (
-                alt.Chart(gm)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("年月:N", sort=sorted(gm["年月"].unique()), title="年月"),
-                    y=alt.Y(
-                        f"{y_field}:Q",
-                        title=y_title,
-                        axis=alt.Axis(format=",.0f" if display_mode == "絶対数（件数）" else ".2%")
-                    ),
-                    color=alt.Color("性別:N", title="性別"),
-                    tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
-                        alt.Tooltip("性別:N", title="性別"),
-                        alt.Tooltip("件数:Q", title="件数", format=",d"),
-                        alt.Tooltip("比率:Q", title="構成比", format=".2%"),
-                    ],
-                )
-                .properties(height=260)
-            )
-            st.altair_chart(chart_gender, use_container_width=True)
-
-        # 年代（FCベース）
-        st.caption("年代別 月別推移（FC件数ベース）")
-        am = monthly_composition(df_filtered, "年代")
-        if not am.empty:
-            y_field = "件数" if display_mode == "絶対数（件数）" else "比率"
-            y_title = "件数" if display_mode == "絶対数（件数）" else "構成比"
-            chart_age = (
-                alt.Chart(am)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("年月:N", sort=sorted(am["年月"].unique()), title="年月"),
-                    y=alt.Y(
-                        f"{y_field}:Q",
-                        title=y_title,
-                        axis=alt.Axis(format=",.0f" if display_mode == "絶対数（件数）" else ".2%")
-                    ),
-                    color=alt.Color("年代:N", title="年代"),
-                    tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
-                        alt.Tooltip("年代:N", title="年代"),
-                        alt.Tooltip("件数:Q", title="件数", format=",d"),
-                        alt.Tooltip("比率:Q", title="構成比", format=".2%"),
-                    ],
-                )
-                .properties(height=260)
-            )
-            st.altair_chart(chart_age, use_container_width=True)
-
-        # 在住国（FCベース）
-        st.caption("在住国別 月別推移（FC件数ベース）")
-        cm = monthly_composition(df_filtered, "在住国")
-        if not cm.empty:
-            y_field = "件数" if display_mode == "絶対数（件数）" else "比率"
-            y_title = "件数" if display_mode == "絶対数（件数）" else "構成比"
-            chart_country = (
-                alt.Chart(cm)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("年月:N", sort=sorted(cm["年月"].unique()), title="年月"),
-                    y=alt.Y(
-                        f"{y_field}:Q",
-                        title=y_title,
-                        axis=alt.Axis(format=",.0f" if display_mode == "絶対数（件数）" else ".2%")
-                    ),
-                    color=alt.Color("在住国:N", title="在住国"),
-                    tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
-                        alt.Tooltip("在住国:N", title="在住国"),
-                        alt.Tooltip("件数:Q", title="件数", format=",d"),
-                        alt.Tooltip("比率:Q", title="構成比", format=".2%"),
-                    ],
-                )
-                .properties(height=260)
-            )
-            st.altair_chart(chart_country, use_container_width=True)
-
-        # ここから入会ベース
-        st.markdown("---")
-        st.subheader("属性別 月別構成比（入会件数ベース）")
-
-        # 性別（入会ベース）
-        st.caption("性別別 月別推移（入会件数ベース）")
-        gm_in = monthly_composition_for_members(df_filtered, "性別")
-        if not gm_in.empty:
-            y_field = "件数" if display_mode == "絶対数（件数）" else "比率"
-            y_title = "件数" if display_mode == "絶対数（件数）" else "構成比"
-            chart_gender_in = (
-                alt.Chart(gm_in)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("年月:N", sort=sorted(gm_in["年月"].unique()), title="年月"),
-                    y=alt.Y(
-                        f"{y_field}:Q",
-                        title=y_title,
-                        axis=alt.Axis(format=",.0f" if display_mode == "絶対数（件数）" else ".2%")
-                    ),
-                    color=alt.Color("性別:N", title="性別"),
-                    tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
-                        alt.Tooltip("性別:N", title="性別"),
-                        alt.Tooltip("件数:Q", title="件数", format=",d"),
-                        alt.Tooltip("比率:Q", title="構成比", format=".2%"),
-                    ],
-                )
-                .properties(height=260)
-            )
-            st.altair_chart(chart_gender_in, use_container_width=True)
-
-        # 年代（入会ベース）
-        st.caption("年代別 月別推移（入会件数ベース）")
-        am_in = monthly_composition_for_members(df_filtered, "年代")
-        if not am_in.empty:
-            y_field = "件数" if display_mode == "絶対数（件数）" else "比率"
-            y_title = "件数" if display_mode == "絶対数（件数）" else "構成比"
-            chart_age_in = (
-                alt.Chart(am_in)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("年月:N", sort=sorted(am_in["年月"].unique()), title="年月"),
-                    y=alt.Y(
-                        f"{y_field}:Q",
-                        title=y_title,
-                        axis=alt.Axis(format=",.0f" if display_mode == "絶対数（件数）" else ".2%")
-                    ),
-                    color=alt.Color("年代:N", title="年代"),
-                    tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
-                        alt.Tooltip("年代:N", title="年代"),
-                        alt.Tooltip("件数:Q", title="件数", format=",d"),
-                        alt.Tooltip("比率:Q", title="構成比", format=".2%"),
-                    ],
-                )
-                .properties(height=260)
-            )
-            st.altair_chart(chart_age_in, use_container_width=True)
-
-        # 在住国（入会ベース）
-        st.caption("在住国別 月別推移（入会件数ベース）")
-        cm_in = monthly_composition_for_members(df_filtered, "在住国")
-        if not cm_in.empty:
-            y_field = "件数" if display_mode == "絶対数（件数）" else "比率"
-            y_title = "件数" if display_mode == "絶対数（件数）" else "構成比"
-            chart_country_in = (
-                alt.Chart(cm_in)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("年月:N", sort=sorted(cm_in["年月"].unique()), title="年月"),
-                    y=alt.Y(
-                        f"{y_field}:Q",
-                        title=y_title,
-                        axis=alt.Axis(format=",.0f" if display_mode == "絶対数（件数）" else ".2%")
-                    ),
-                    color=alt.Color("在住国:N", title="在住国"),
-                    tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
-                        alt.Tooltip("在住国:N", title="在住国"),
-                        alt.Tooltip("件数:Q", title="件数", format=",d"),
-                        alt.Tooltip("比率:Q", title="構成比", format=".2%"),
-                    ],
-                )
-                .properties(height=260)
-            )
-            st.altair_chart(chart_country_in, use_container_width=True)
-
-    # CEFR分析
+    # ===== CEFR分析 =====
     with tab_cefr:
         st.subheader("CEFR別 入会分析")
 
