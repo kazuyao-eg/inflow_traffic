@@ -16,7 +16,7 @@ def load_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     df["FC実施年月日"] = pd.to_datetime(df["FC実施年月日"], errors="coerce")
     df["年月"] = df["FC実施年月日"].dt.to_period("M").astype(str)
-    df["月"] = df["FC実施年月日"].dt.strftime("%m")
+    df["年"] = df["FC実施年月日"].dt.year.astype(str)
 
     df["入会フラグ"] = np.where(df["ステータス"] == "入会", 1, 0)
     df["入会ステータス"] = np.where(df["入会フラグ"] == 1, "入会", "非入会")
@@ -187,7 +187,6 @@ def time_composition(
 
 
 def format_crosstab_with_ratio(ct: pd.DataFrame) -> pd.DataFrame:
-    """クロス集計表の各セルを 件数(比率%) 形式にする。margins 含む。比率の分母は全体合計。"""
     ct2 = ct.fillna(0).astype(int)
     grand = int(ct2.loc["合計", "合計"])
 
@@ -207,7 +206,6 @@ def format_crosstab_with_ratio(ct: pd.DataFrame) -> pd.DataFrame:
 
 
 def make_dist(df: pd.DataFrame, col: str, label: str):
-    """属性分布（表＋円グラフ用）"""
     s = df[col]
     if col == "年代":
         vc = s.value_counts(dropna=False, sort=False)
@@ -239,7 +237,6 @@ def make_dist(df: pd.DataFrame, col: str, label: str):
 
 
 def render_summary_tab(df: pd.DataFrame, base_label: str) -> None:
-    # 月別集計
     st.subheader(f"月別 {base_label}件数")
 
     monthly_cnt = (
@@ -264,7 +261,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str) -> None:
         )
         st.altair_chart(chart, use_container_width=True)
     else:
-        st.info("表示可能なデータがありません。")
+        st.info("現在のフィルタ条件ではデータがありません。")
 
     st.markdown("---")
     st.subheader("属性構成（参考）")
@@ -406,7 +403,7 @@ def main():
         ["サマリー", "流入像（属性）", "流入像（チャネル）", "CEFR分析"]
     )
 
-    # ===== サマリー（FC / 入会 切り替え）=====
+    # ===== サマリー =====
     with tab_summary:
         base_mode = st.radio(
             "表示形式の切り替え（ベース）",
@@ -435,12 +432,12 @@ def main():
 
         time_mode = st.radio(
             "表示形式の切り替え②（時間軸）",
-            options=["年月", "月別"],
+            options=["年月", "年別"],
             horizontal=True
         )
-        time_col = "年月" if time_mode == "年月" else "月"
+        time_col = "年月" if time_mode == "年月" else "年"
 
-        def plot_attr_ts(title: str, cols, label_col_name: str):
+        def plot_attr_ts(title: str, cols):
             st.caption(title)
             if isinstance(cols, str):
                 group_col = cols
@@ -456,12 +453,6 @@ def main():
                 st.info("表示できるデータがありません。")
                 return
 
-            display_mode = "絶対数（件数）" if label_col_name == "件数" else "割合（構成比）"
-            # 実際にはサイドの display_mode ではなく、常にスイッチ①に連動したベースのみなので、
-            # y 軸は比率/件数の両方に対応できるよう可変にする場合は別ラジオを用意する。
-
-            # ここでは「FC/入会ベース」だけ切り替え、縦軸は比率固定とせず、
-            # 簡単のため「比率」をメイン、件数はツールチップで見る形にする
             y_field = "比率"
             y_title = "構成比"
 
@@ -469,7 +460,11 @@ def main():
                 alt.Chart(comp)
                 .mark_line(point=True)
                 .encode(
-                    x=alt.X(f"{time_col}:N", sort=sorted(comp[time_col].unique().tolist()), title=time_col),
+                    x=alt.X(
+                        f"{time_col}:N",
+                        sort=sorted(comp[time_col].unique().tolist()),
+                        title=time_col
+                    ),
                     y=alt.Y(
                         f"{y_field}:Q",
                         title=y_title,
@@ -488,17 +483,17 @@ def main():
             st.altair_chart(chart, use_container_width=True)
 
         # 単属性
-        plot_attr_ts("性別別 推移", "性別", "比率")
-        plot_attr_ts("年代別 推移", "年代", "比率")
-        plot_attr_ts("在住国別 推移", "在住国", "比率")
+        plot_attr_ts("性別別 推移", "性別")
+        plot_attr_ts("年代別 推移", "年代")
+        plot_attr_ts("在住国別 推移", "在住国")
 
         # ペア属性
-        plot_attr_ts("性別 × 年代別 推移", ("性別", "年代"), "比率")
-        plot_attr_ts("性別 × CEFR 推移", ("性別", "CEFR"), "比率")
-        plot_attr_ts("性別 × 在住国 推移", ("性別", "在住国"), "比率")
-        plot_attr_ts("年代 × CEFR 推移", ("年代", "CEFR"), "比率")
-        plot_attr_ts("年代 × 在住国 推移", ("年代", "在住国"), "比率")
-        plot_attr_ts("在住国 × CEFR 推移", ("在住国", "CEFR"), "比率")
+        plot_attr_ts("性別 × 年代別 推移", ("性別", "年代"))
+        plot_attr_ts("性別 × CEFR 推移", ("性別", "CEFR"))
+        plot_attr_ts("性別 × 在住国 推移", ("性別", "在住国"))
+        plot_attr_ts("年代 × CEFR 推移", ("年代", "CEFR"))
+        plot_attr_ts("年代 × 在住国 推移", ("年代", "在住国"))
+        plot_attr_ts("在住国 × CEFR 推移", ("在住国", "CEFR"))
 
     # ===== 流入像（チャネル）=====
     with tab_channel:
