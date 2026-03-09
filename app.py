@@ -383,7 +383,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str) -> None:
 
 def main():
     st.title("属性別流入ダッシュボード")
-    st.markdown("月別の推移・属性別の構成・チャネル別・CEFR別の流入数、入会率を把握するためのダッシュボードです。")
+    st.markdown("左のフィルター、各タブの「表示形式の切り替え」スイッチでフィルターをかけることが可能です。")
 
     try:
         df_raw = load_data("fc_info.csv")
@@ -437,6 +437,12 @@ def main():
         )
         time_col = "年月" if time_mode == "年月" else "年"
 
+        display_mode_attr = st.radio(
+            "表示形式の切り替え③（指標）",
+            options=["絶対数（件数）", "割合（構成比）"],
+            horizontal=True
+        )
+
         def plot_attr_ts(title: str, cols):
             st.caption(title)
             if isinstance(cols, str):
@@ -453,8 +459,9 @@ def main():
                 st.info("表示できるデータがありません。")
                 return
 
-            y_field = "比率"
-            y_title = "構成比"
+            y_field = "件数" if display_mode_attr == "絶対数（件数）" else "比率"
+            y_title = "件数" if display_mode_attr == "絶対数（件数）" else "構成比"
+            axis_format = ",.0f" if display_mode_attr == "絶対数（件数）" else ".2%"
 
             chart = (
                 alt.Chart(comp)
@@ -468,7 +475,7 @@ def main():
                     y=alt.Y(
                         f"{y_field}:Q",
                         title=y_title,
-                        axis=alt.Axis(format=".2%")
+                        axis=alt.Axis(format=axis_format)
                     ),
                     color=alt.Color(f"{group_col}:N", title=group_col),
                     tooltip=[
