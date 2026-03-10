@@ -262,24 +262,29 @@ def make_dist(df: pd.DataFrame, col: str, label: str):
     return pie, table[[label, "件数(比率)"]], total
 
 
-def render_summary_tab(df: pd.DataFrame, base_label: str) -> None:
-    st.subheader(f"月別 {base_label}件数")
+def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年月") -> None:
+    time_label = "月別" if time_col == "年月" else "年別"
+    st.subheader(f"{time_label} {base_label}件数")
 
-    monthly_cnt = (
-        df.groupby("年月")
+    period_cnt = (
+        df.groupby(time_col)
         .size()
         .reset_index(name="件数")
     )
 
-    if not monthly_cnt.empty:
+    if not period_cnt.empty:
         chart = (
-            alt.Chart(monthly_cnt)
+            alt.Chart(period_cnt)
             .mark_line(point=True)
             .encode(
-                x=alt.X("年月:N", sort=sorted(monthly_cnt["年月"].unique()), title="年月"),
-                y=alt.Y("件数:Q", title=f"月別 {base_label}件数"),
+                x=alt.X(
+                    f"{time_col}:N",
+                    sort=sorted(period_cnt[time_col].unique().tolist()),
+                    title=time_col
+                ),
+                y=alt.Y("件数:Q", title=f"{time_label} {base_label}件数"),
                 tooltip=[
-                    alt.Tooltip("年月:N", title="年月"),
+                    alt.Tooltip(f"{time_col}:N", title=time_col),
                     alt.Tooltip("件数:Q", title="件数", format=",d"),
                 ],
             )
@@ -432,18 +437,25 @@ def main():
     # ===== サマリー =====
     with tab_summary:
         base_mode = st.radio(
-            "表示形式の切り替え（ベース）",
+            "表示形式の切り替え①（ベース）",
             options=["FC件数ベース", "入会件数ベース"],
             horizontal=True
         )
+        time_mode_summary = st.radio(
+            "表示形式の切り替え②（時間軸）",
+            options=["年月", "年別"],
+            horizontal=True
+        )
+        time_col_summary = "年月" if time_mode_summary == "年月" else "年"
+
         if base_mode == "入会件数ベース":
             df_base = df_filtered[df_filtered["入会フラグ"] == 1].copy()
             if df_base.empty:
                 st.warning("現在のフィルタ条件では入会データがありません。条件を緩めてみてください。")
             else:
-                render_summary_tab(df_base, "入会")
+                render_summary_tab(df_base, "入会", time_col=time_col_summary)
         else:
-            render_summary_tab(df_filtered, "FC")
+            render_summary_tab(df_filtered, "FC", time_col=time_col_summary)
 
     # ===== 流入像（属性）=====
     with tab_attr:
