@@ -44,32 +44,33 @@ def apply_filters(df: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[Dict]]:
     start_month, end_month = st.sidebar.select_slider(
         "表示期間（年月）",
         options=month_list,
-        value=(month_list[0], month_list[-1])
+        value=(month_list[0], month_list[-1]),
+        key="sidebar_period"
     )
 
     df = df.loc[(df["年月"] >= start_month) & (df["年月"] <= end_month)].copy()
 
     genders = df["性別"].dropna().unique().tolist()
     if len(genders) > 0:
-        selected_genders = st.sidebar.multiselect("性別", options=genders, default=genders)
+        selected_genders = st.sidebar.multiselect("性別", options=genders, default=genders, key="sidebar_gender")
         if selected_genders:
             df = df[df["性別"].isin(selected_genders)]
 
     ages = df["年代"].dropna().unique().tolist()
     if len(ages) > 0:
-        selected_ages = st.sidebar.multiselect("年代", options=ages, default=ages)
+        selected_ages = st.sidebar.multiselect("年代", options=ages, default=ages, key="sidebar_age")
         if selected_ages:
             df = df[df["年代"].isin(selected_ages)]
 
     countries = df["在住国"].dropna().unique().tolist()
     if len(countries) > 0:
-        selected_countries = st.sidebar.multiselect("在住国", options=countries, default=countries)
+        selected_countries = st.sidebar.multiselect("在住国", options=countries, default=countries, key="sidebar_country")
         if selected_countries:
             df = df[df["在住国"].isin(selected_countries)]
 
     cefrs = df["CEFR"].dropna().unique().tolist()
     if len(cefrs) > 0:
-        selected_cefrs = st.sidebar.multiselect("CEFR", options=cefrs, default=cefrs)
+        selected_cefrs = st.sidebar.multiselect("CEFR", options=cefrs, default=cefrs, key="sidebar_cefr")
         if selected_cefrs:
             df = df[df["CEFR"].isin(selected_cefrs)]
 
@@ -77,7 +78,8 @@ def apply_filters(df: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[Dict]]:
         "チャネル軸の選択",
         options=["集客経路", "流入経路", "識別用のラベル"],
         index=0,
-        help="標準は『集客経路』。必要に応じて他の軸でも分析できます。"
+        help="標準は『集客経路』。必要に応じて他の軸でも分析できます。",
+        key="sidebar_channel_axis"
     )
 
     return df, {
@@ -439,12 +441,14 @@ def main():
         base_mode = st.radio(
             "表示形式の切り替え①（ベース）",
             options=["FC件数ベース", "入会件数ベース"],
-            horizontal=True
+            horizontal=True,
+            key="summary_base_mode"
         )
         time_mode_summary = st.radio(
             "表示形式の切り替え②（時間軸）",
             options=["年月", "年別"],
-            horizontal=True
+            horizontal=True,
+            key="summary_time_mode"
         )
         time_col_summary = "年月" if time_mode_summary == "年月" else "年"
 
@@ -464,21 +468,24 @@ def main():
         base_mode_attr = st.radio(
             "表示形式の切り替え①（ベース）",
             options=["FC件数ベース", "入会件数ベース"],
-            horizontal=True
+            horizontal=True,
+            key="attr_base_mode"
         )
         member_base_attr = base_mode_attr == "入会件数ベース"
 
         time_mode = st.radio(
             "表示形式の切り替え②（時間軸）",
             options=["年月", "年別"],
-            horizontal=True
+            horizontal=True,
+            key="attr_time_mode"
         )
         time_col = "年月" if time_mode == "年月" else "年"
 
         display_mode_attr = st.radio(
             "表示形式の切り替え③（指標）",
             options=["絶対数（件数）", "割合（構成比）", "市場寄与度"],
-            horizontal=True
+            horizontal=True,
+            key="attr_display_mode"
         )
 
         def plot_attr_ts(title: str, cols):
@@ -561,7 +568,8 @@ def main():
         display_mode = st.radio(
             "表示形式の切り替え",
             options=["絶対数（件数）", "割合（構成比）"],
-            horizontal=True
+            horizontal=True,
+            key="channel_display_mode"
         )
 
         st.markdown("### 上位チャネル（5件）の月別推移")
@@ -615,7 +623,8 @@ def main():
         display_mode_cefr = st.radio(
             "表示形式の切り替え（CEFR）",
             options=["絶対数（件数）", "割合（構成比）"],
-            horizontal=True
+            horizontal=True,
+            key="cefr_display_mode"
         )
 
         st.caption("月別 FC件数に対する CEFR 別構成比")
