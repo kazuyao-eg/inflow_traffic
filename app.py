@@ -312,7 +312,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("性別:N", scale=alt.Scale(scheme="blues"), title="性別"),
+                    color=alt.Color("性別:N", scale=alt.Scale(scheme="category20"), title="性別"),
                     tooltip=[
                         alt.Tooltip("性別:N", title="性別"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -336,7 +336,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("年代:N", scale=alt.Scale(scheme="blues"), title="年代"),
+                    color=alt.Color("年代:N", scale=alt.Scale(scheme="category20"), title="年代"),
                     tooltip=[
                         alt.Tooltip("年代:N", title="年代"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -360,7 +360,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("CEFR:N", scale=alt.Scale(scheme="blues"), title="CEFR"),
+                    color=alt.Color("CEFR:N", scale=alt.Scale(scheme="category20"), title="CEFR"),
                     tooltip=[
                         alt.Tooltip("CEFR:N", title="CEFR"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -384,7 +384,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("在住国:N", scale=alt.Scale(scheme="blues"), title="在住国"),
+                    color=alt.Color("在住国:N", scale=alt.Scale(scheme="category20"), title="在住国"),
                     tooltip=[
                         alt.Tooltip("在住国:N", title="在住国"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
