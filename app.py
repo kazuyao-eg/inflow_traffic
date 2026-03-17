@@ -17,7 +17,7 @@ def load_data(path: str) -> pd.DataFrame:
     df["FC実施年月日"] = pd.to_datetime(df["FC実施年月日"], errors="coerce")
     df["年月"] = df["FC実施年月日"].dt.to_period("M").astype(str)
     df["年"] = df["FC実施年月日"].dt.year.astype(str)
-    # 半年ごと: 1-6月→1月, 7-12月→7月（例: 2024-H1, 2024-H2）
+    # 半年ごと: 1-6月→1-6月, 7-12月→7-12月（例: 2024-1-6月, 2024-7-12月）
     df["半年"] = (
         df["FC実施年月日"].dt.year.astype(str)
         + "-"
