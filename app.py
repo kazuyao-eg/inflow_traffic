@@ -17,6 +17,12 @@ def load_data(path: str) -> pd.DataFrame:
     df["FC実施年月日"] = pd.to_datetime(df["FC実施年月日"], errors="coerce")
     df["年月"] = df["FC実施年月日"].dt.to_period("M").astype(str)
     df["年"] = df["FC実施年月日"].dt.year.astype(str)
+    # 半年ごと: 1-6月→H1, 7-12月→H2（例: 2024-H1, 2024-H2）
+    df["半年"] = (
+        df["FC実施年月日"].dt.year.astype(str)
+        + "-"
+        + np.where(df["FC実施年月日"].dt.month <= 6, "H1", "H2")
+    )
 
     df["入会フラグ"] = np.where(df["ステータス"] == "入会", 1, 0)
     df["入会ステータス"] = np.where(df["入会フラグ"] == 1, "入会", "非入会")
@@ -189,7 +195,6 @@ def time_composition(
     # 市場寄与度の計算（セグメントの増減 / 全体の増減）
     merged = merged.sort_values([time_col, group_col]).copy()
 
-    # 全体増減
     total_series = merged.groupby(time_col)["件数"].sum().sort_index()
     total_delta = total_series.diff()
     merged = merged.merge(
@@ -198,7 +203,6 @@ def time_composition(
         how="left"
     )
 
-    # セグメント増減
     merged["増減"] = (
         merged.sort_values([group_col, time_col])
         .groupby(group_col)["件数"]
@@ -264,8 +268,26 @@ def make_dist(df: pd.DataFrame, col: str, label: str):
     return pie, table[[label, "件数(比率)"]], total
 
 
+def _time_col_from_mode(mode: str) -> str:
+    if mode == "年月":
+        return "年月"
+    if mode == "年別":
+        return "年"
+    return "半年"  # 半年ごと
+
+
+def _time_label_from_mode(mode: str) -> str:
+    if mode == "年月":
+        return "月別"
+    if mode == "年別":
+        return "年別"
+    return "半年ごと"
+
+
 def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年月") -> None:
-    time_label = "月別" if time_col == "年月" else "年別"
+    time_labels = {"年月": "月別", "年": "年別", "半年": "半年ごと"}
+    time_label = time_labels.get(time_col, "月別")
+
     st.subheader(f"{time_label} {base_label}件数")
 
     period_cnt = (
@@ -275,13 +297,14 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
     )
 
     if not period_cnt.empty:
+        sort_vals = sorted(period_cnt[time_col].unique().tolist())
         chart = (
             alt.Chart(period_cnt)
             .mark_line(point=True)
             .encode(
                 x=alt.X(
                     f"{time_col}:N",
-                    sort=sorted(period_cnt[time_col].unique().tolist()),
+                    sort=sort_vals,
                     title=time_col
                 ),
                 y=alt.Y("件数:Q", title=f"{time_label} {base_label}件数"),
@@ -299,7 +322,6 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
     st.markdown("---")
     st.subheader("属性構成（参考）")
 
-    # 性別
     st.caption("性別構成")
     col_t1, col_p1 = st.columns(2)
     pie_gender, table_gender, total_gender = make_dist(df, "性別", "性別")
@@ -312,7 +334,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("性別:N", scale=alt.Scale(scheme="category20"), title="性別"),
+                    color=alt.Color("性別:N", scale=alt.Scale(scheme="blues"), title="性別"),
                     tooltip=[
                         alt.Tooltip("性別:N", title="性別"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -323,7 +345,6 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
             )
             st.altair_chart(pie, use_container_width=True)
 
-    # 年代
     st.caption("年代構成")
     col_t2, col_p2 = st.columns(2)
     pie_age, table_age, total_age = make_dist(df, "年代", "年代")
@@ -336,7 +357,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("年代:N", scale=alt.Scale(scheme="category20"), title="年代"),
+                    color=alt.Color("年代:N", scale=alt.Scale(scheme="blues"), title="年代"),
                     tooltip=[
                         alt.Tooltip("年代:N", title="年代"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -347,7 +368,6 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
             )
             st.altair_chart(pie, use_container_width=True)
 
-    # CEFR
     st.caption("CEFR構成")
     col_t3, col_p3 = st.columns(2)
     pie_cefr, table_cefr, total_cefr = make_dist(df, "CEFR", "CEFR")
@@ -360,7 +380,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("CEFR:N", scale=alt.Scale(scheme="category20"), title="CEFR"),
+                    color=alt.Color("CEFR:N", scale=alt.Scale(scheme="blues"), title="CEFR"),
                     tooltip=[
                         alt.Tooltip("CEFR:N", title="CEFR"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -371,7 +391,6 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
             )
             st.altair_chart(pie, use_container_width=True)
 
-    # 在住国
     st.caption("在住国構成")
     col_t4, col_p4 = st.columns(2)
     pie_country, table_country, total_country = make_dist(df, "在住国", "在住国")
@@ -384,7 +403,7 @@ def render_summary_tab(df: pd.DataFrame, base_label: str, time_col: str = "年�
                 .mark_arc()
                 .encode(
                     theta=alt.Theta("件数:Q"),
-                    color=alt.Color("在住国:N", scale=alt.Scale(scheme="category20"), title="在住国"),
+                    color=alt.Color("在住国:N", scale=alt.Scale(scheme="blues"), title="在住国"),
                     tooltip=[
                         alt.Tooltip("在住国:N", title="在住国"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
@@ -446,11 +465,11 @@ def main():
         )
         time_mode_summary = st.radio(
             "表示形式の切り替え②（時間軸）",
-            options=["年月", "年別"],
+            options=["年月", "年別", "半年ごと"],
             horizontal=True,
             key="summary_time_mode"
         )
-        time_col_summary = "年月" if time_mode_summary == "年月" else "年"
+        time_col_summary = _time_col_from_mode(time_mode_summary)
 
         if base_mode == "入会件数ベース":
             df_base = df_filtered[df_filtered["入会フラグ"] == 1].copy()
@@ -475,11 +494,11 @@ def main():
 
         time_mode = st.radio(
             "表示形式の切り替え②（時間軸）",
-            options=["年月", "年別"],
+            options=["年月", "年別", "半年ごと"],
             horizontal=True,
             key="attr_time_mode"
         )
-        time_col = "年月" if time_mode == "年月" else "年"
+        time_col = _time_col_from_mode(time_mode)
 
         display_mode_attr = st.radio(
             "表示形式の切り替え③（指標）",
@@ -512,7 +531,7 @@ def main():
                 y_field = "比率"
                 y_title = "構成比"
                 axis_format = ".2%"
-            else:  # 市場寄与度
+            else:
                 y_field = "市場寄与度"
                 y_title = "市場寄与度"
                 axis_format = ".2%"
@@ -544,12 +563,9 @@ def main():
             )
             st.altair_chart(chart, use_container_width=True)
 
-        # 単属性
         plot_attr_ts("性別別 推移", "性別")
         plot_attr_ts("年代別 推移", "年代")
         plot_attr_ts("在住国別 推移", "在住国")
-
-        # ペア属性
         plot_attr_ts("性別 × 年代別 推移", ("性別", "年代"))
         plot_attr_ts("性別 × CEFR 推移", ("性別", "CEFR"))
         plot_attr_ts("性別 × 在住国 推移", ("性別", "在住国"))
@@ -626,46 +642,67 @@ def main():
             horizontal=True,
             key="cefr_display_mode"
         )
+        time_mode_cefr = st.radio(
+            "表示形式の切り替え②（時間軸）",
+            options=["年月", "年別", "半年ごと"],
+            horizontal=True,
+            key="cefr_time_mode"
+        )
+        time_col_cefr = _time_col_from_mode(time_mode_cefr)
 
-        st.caption("月別 FC件数に対する CEFR 別構成比")
-        cefr_month_fc = monthly_composition(df_filtered, "CEFR")
-        if not cefr_month_fc.empty:
+        st.caption(f"{_time_label_from_mode(time_mode_cefr)} FC件数に対する CEFR 別構成比")
+        cefr_fc = time_composition(df_filtered, time_col_cefr, "CEFR", member_base=False)
+        if not cefr_fc.empty:
             y_field = "件数" if display_mode_cefr == "絶対数（件数）" else "比率"
             y_title = "件数" if display_mode_cefr == "絶対数（件数）" else "構成比"
+            axis_fmt = ",.0f" if display_mode_cefr == "絶対数（件数）" else ".2%"
             st.altair_chart(
-                alt.Chart(cefr_month_fc).mark_line(point=True).encode(
-                    x=alt.X("年月:N", sort=sorted(cefr_month_fc["年月"].unique()), title="年月"),
-                    y=alt.Y(f"{y_field}:Q", title=y_title,
-                            axis=alt.Axis(format=",.0f" if display_mode_cefr == "絶対数（件数）" else ".2%")),
+                alt.Chart(cefr_fc)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X(
+                        f"{time_col_cefr}:N",
+                        sort=sorted(cefr_fc[time_col_cefr].unique().tolist()),
+                        title=time_col_cefr
+                    ),
+                    y=alt.Y(f"{y_field}:Q", title=y_title, axis=alt.Axis(format=axis_fmt)),
                     color=alt.Color("CEFR:N", title="CEFR"),
                     tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
+                        alt.Tooltip(f"{time_col_cefr}:N", title=time_col_cefr),
                         alt.Tooltip("CEFR:N", title="CEFR"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
                         alt.Tooltip("比率:Q", title="構成比", format=".2%"),
                     ],
-                ).properties(height=280),
+                )
+                .properties(height=280),
                 use_container_width=True
             )
 
-        st.caption("月別 入会件数に対する CEFR 別構成比（入会者ベース）")
-        cefr_month_member = monthly_composition_for_members(df_filtered, "CEFR")
-        if not cefr_month_member.empty:
+        st.caption(f"{_time_label_from_mode(time_mode_cefr)} 入会件数に対する CEFR 別構成比（入会者ベース）")
+        cefr_member = time_composition(df_filtered, time_col_cefr, "CEFR", member_base=True)
+        if not cefr_member.empty:
             y_field = "件数" if display_mode_cefr == "絶対数（件数）" else "比率"
             y_title = "件数" if display_mode_cefr == "絶対数（件数）" else "構成比"
+            axis_fmt = ",.0f" if display_mode_cefr == "絶対数（件数）" else ".2%"
             st.altair_chart(
-                alt.Chart(cefr_month_member).mark_line(point=True).encode(
-                    x=alt.X("年月:N", sort=sorted(cefr_month_member["年月"].unique()), title="年月"),
-                    y=alt.Y(f"{y_field}:Q", title=y_title,
-                            axis=alt.Axis(format=",.0f" if display_mode_cefr == "絶対数（件数）" else ".2%")),
+                alt.Chart(cefr_member)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X(
+                        f"{time_col_cefr}:N",
+                        sort=sorted(cefr_member[time_col_cefr].unique().tolist()),
+                        title=time_col_cefr
+                    ),
+                    y=alt.Y(f"{y_field}:Q", title=y_title, axis=alt.Axis(format=axis_fmt)),
                     color=alt.Color("CEFR:N", title="CEFR"),
                     tooltip=[
-                        alt.Tooltip("年月:N", title="年月"),
+                        alt.Tooltip(f"{time_col_cefr}:N", title=time_col_cefr),
                         alt.Tooltip("CEFR:N", title="CEFR"),
                         alt.Tooltip("件数:Q", title="件数", format=",d"),
                         alt.Tooltip("比率:Q", title="構成比", format=".2%"),
                     ],
-                ).properties(height=280),
+                )
+                .properties(height=280),
                 use_container_width=True
             )
 
