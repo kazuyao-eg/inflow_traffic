@@ -17,11 +17,11 @@ def load_data(path: str) -> pd.DataFrame:
     df["FC実施年月日"] = pd.to_datetime(df["FC実施年月日"], errors="coerce")
     df["年月"] = df["FC実施年月日"].dt.to_period("M").astype(str)
     df["年"] = df["FC実施年月日"].dt.year.astype(str)
-    # 半年ごと: 1-6月→H1, 7-12月→H2（例: 2024-H1, 2024-H2）
+    # 半年ごと: 1-6月→1月, 7-12月→7月（例: 2024-H1, 2024-H2）
     df["半年"] = (
         df["FC実施年月日"].dt.year.astype(str)
         + "-"
-        + np.where(df["FC実施年月日"].dt.month <= 6, "H1", "H2")
+        + np.where(df["FC実施年月日"].dt.month <= 6, "1-6月", "7-12月")
     )
 
     df["入会フラグ"] = np.where(df["ステータス"] == "入会", 1, 0)
