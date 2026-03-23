@@ -227,7 +227,6 @@ def time_composition(
     # 市場寄与度の計算（セグメントの増減 / 全体の増減）
     merged = merged.sort_values([time_col, group_col]).copy()
 
-    # 全体増減
     total_series = merged.groupby(time_col)["件数"].sum().sort_index()
     total_delta = total_series.diff()
     merged = merged.merge(
@@ -236,7 +235,6 @@ def time_composition(
         how="left"
     )
 
-    # セグメント増減
     merged["増減"] = (
         merged.sort_values([group_col, time_col])
         .groupby(group_col)["件数"]
@@ -284,7 +282,10 @@ def make_dist(df: pd.DataFrame, col: str, label: str):
 
     if total > 0:
         dist["比率"] = dist["件数"] / total
-        dist["件数(比率)"] = dist.apply(lambda r: f"{int(r['件数'])}({r['比率'] * 100:.2f}%)", axis=1)
+        dist["件数(比率)"] = dist.apply(
+            lambda r: f"{int(r['件数'])}({r['比率'] * 100:.2f}%)",
+            axis=1
+        )
         total_row = pd.DataFrame(
             [["合計", total, 1.0, f"{total}(100.00%)"]],
             columns=[label, "件数", "比率", "件数(比率)"],
@@ -512,7 +513,7 @@ def main():
         if base_mode == "入会件数ベース":
             df_base = df_filtered[df_filtered["入会フラグ"] == 1].copy()
             if df_base.empty:
-                st.warning("現在のフィルタ条件では入会データがありません。条件を緩めてみてください。")
+                st.warning("現在のフィルタ条件では入会データがありません。条件を緩めてください。")
             else:
                 render_summary_tab(df_base, "入会", time_col=time_col_summary)
         else:
@@ -619,44 +620,87 @@ def main():
         channel_summary = aggregate_channel_summary(df_filtered, channel_col)
         st.dataframe(channel_summary.sort_values("FC件数", ascending=False), use_container_width=True)
 
+        # --- 上位チャネル（5件）の月別推移（動的化）---
+        channel_base_mode = st.radio(
+            "表示形式の切り替え①（ベース）",
+            options=["FC件数ベース", "入会件数ベース"],
+            horizontal=True,
+            key="channel_base_mode"
+        )
+        member_base_channel = channel_base_mode == "入会件数ベース"
+
+        channel_time_mode = st.radio(
+            "表示形式の切り替え②（時間軸）",
+            options=["年月", "年別", "半年ごと"],
+            horizontal=True,
+            key="channel_time_mode"
+        )
+        time_col_channel = _time_col_from_mode(channel_time_mode)
+
         display_mode = st.radio(
-            "表示形式の切り替え",
+            "表示形式の切り替え③（指標）",
             options=["絶対数（件数）", "割合（構成比）"],
             horizontal=True,
-            key="channel_display_mode"
+            key="channel_indicator_mode"
         )
 
-        st.markdown("### 上位チャネル（5件）の月別推移")
+        st.markdown(f"### 上位チャネル（5件）の{_time_label_from_mode(channel_time_mode)}推移")
 
-        top_channels = (
-            df_filtered[channel_col]
-            .value_counts()
-            .head(5)
-            .index
-            .tolist()
-        )
+        # 上位5チャネル（ベースに応じて決定）
+        if member_base_channel:
+            df_for_top = df_filtered[df_filtered["入会フラグ"] == 1].copy()
+        else:
+            df_for_top = df_filtered
 
-        if len(top_channels) > 0:
-            df_top = df_filtered[df_filtered[channel_col].isin(top_channels)].copy()
-            chan_month = monthly_composition(df_top, channel_col)
+        if df_for_top.empty:
+            st.info("選択条件ではデータがありません。")
+        else:
+            top_channels = (
+                df_for_top[channel_col]
+                .value_counts()
+                .head(5)
+                .index
+                .tolist()
+            )
 
-            if not chan_month.empty:
-                y_field = "件数" if display_mode == "絶対数（件数）" else "比率"
-                y_title = "件数" if display_mode == "絶対数（件数）" else "構成比"
+            df_top = df_for_top[df_for_top[channel_col].isin(top_channels)].copy()
+
+            comp = time_composition(
+                df_top,
+                time_col_channel,
+                channel_col,
+                member_base_channel
+            )
+
+            if comp.empty:
+                st.info("上位チャネルの推移を表示できません。")
+            else:
+                if display_mode == "絶対数（件数）":
+                    y_field = "件数"
+                    axis_fmt = ",.0f"
+                    y_title = "件数"
+                else:
+                    y_field = "比率"
+                    axis_fmt = ".2%"
+                    y_title = "構成比"
 
                 chart_chan = (
-                    alt.Chart(chan_month)
+                    alt.Chart(comp)
                     .mark_line(point=True)
                     .encode(
-                        x=alt.X("年月:N", sort=sorted(chan_month["年月"].unique()), title="年月"),
+                        x=alt.X(
+                            f"{time_col_channel}:N",
+                            sort=sorted(comp[time_col_channel].unique().tolist()),
+                            title=time_col_channel
+                        ),
                         y=alt.Y(
                             f"{y_field}:Q",
                             title=y_title,
-                            axis=alt.Axis(format=",.0f" if display_mode == "絶対数（件数）" else ".2%")
+                            axis=alt.Axis(format=axis_fmt)
                         ),
                         color=alt.Color(f"{channel_col}:N", title=channel_col),
                         tooltip=[
-                            alt.Tooltip("年月:N", title="年月"),
+                            alt.Tooltip(f"{time_col_channel}:N", title=time_col_channel),
                             alt.Tooltip(f"{channel_col}:N", title=channel_col),
                             alt.Tooltip("件数:Q", title="件数", format=",d"),
                             alt.Tooltip("比率:Q", title="構成比", format=".2%"),
@@ -665,10 +709,6 @@ def main():
                     .properties(height=320)
                 )
                 st.altair_chart(chart_chan, use_container_width=True)
-            else:
-                st.info("チャネル別の月別推移を表示できません。")
-        else:
-            st.info("チャネルデータが不足しています。")
 
     # ===== CEFR分析 =====
     with tab_cefr:
