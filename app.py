@@ -633,7 +633,7 @@ def main():
             key="channel_indicator_mode"
         )
 
-        st.markdown(f"### 上位チャネル（10件）の{time_label_channel}推移")
+        st.markdown(f"### 上位チャネル（最大10件）の{time_label_channel}推移")
 
         # 上位5チャネル（ベースに応じて）
         if member_base_channel:
