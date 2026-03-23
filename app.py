@@ -633,7 +633,7 @@ def main():
             key="channel_indicator_mode"
         )
 
-        st.markdown(f"### 上位チャネル（5件）の{time_label_channel}推移")
+        st.markdown(f"### 上位チャネル（10件）の{time_label_channel}推移")
 
         # 上位5チャネル（ベースに応じて）
         if member_base_channel:
@@ -647,7 +647,7 @@ def main():
             top_channels = (
                 df_for_top[channel_col]
                 .value_counts()
-                .head(5)
+                .head(10)
                 .index
                 .tolist()
             )
